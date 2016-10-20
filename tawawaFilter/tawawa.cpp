@@ -37,8 +37,12 @@ public:
 	TawawaFilter(PClip child, IScriptEnvironment* env)
 		: GenericVideoFilter(child)
 	{
-		if (!vi.IsRGB24())
-			env->ThrowError("TawawaFilter: Only RGB24 input is supported.");
+		if (!vi.IsYV12())
+			env->ThrowError("TawawaFilter: Only YV12 input is supported.");
+		if (vi.width & 15)
+			env->ThrowError("TawawaFilter: Width must be mod16");
+		if (vi.height & 1)
+			env->ThrowError("TawawaFilter: Height must be even");
 	}
 
 	PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env) override
@@ -46,35 +50,65 @@ public:
 		PVideoFrame frame = child->GetFrame(n, env);
 		PVideoFrame newFrame = env->NewVideoFrame(vi);
 		
-		const unsigned char* pSrc = frame->GetReadPtr();
-		unsigned char* pDst = newFrame->GetWritePtr();
+		const unsigned char* pSrc = frame->GetReadPtr(PLANAR_Y);
+		unsigned char* pDstY = newFrame->GetWritePtr(PLANAR_Y);
+		unsigned char* pDstU = newFrame->GetWritePtr(PLANAR_U);
+		unsigned char* pDstV = newFrame->GetWritePtr(PLANAR_V);
 
-		int srcPitch = frame->GetPitch();
-		int dstPitch = newFrame->GetPitch();
+		int srcPitch = frame->GetPitch(PLANAR_Y);
+		int dstPitchY = newFrame->GetPitch(PLANAR_Y);
+		int dstPitchU = newFrame->GetPitch(PLANAR_U);
+		int dstPitchV = newFrame->GetPitch(PLANAR_V);
 
-		for (int ch = 0; ch < vi.height; ++ch)
+		for (int i = 0; i < vi.height; i += 2)
 		{
-			const unsigned char* pcSrc = pSrc + srcPitch * ch;
-			unsigned char* pcDst = pDst + dstPitch * ch;
-
-			for (int cw = 0; cw < vi.width; ++cw)
+			auto cpSrc = pSrc;
+			auto cpDstY = pDstY;
+			auto cpDstU = pDstU;
+			auto cpDstV = pDstV;
+			for (int j = 0; j < vi.width; j += 2)
 			{
-				double y = pcSrc[2] * 0.3 + pcSrc[1] * 0.59 + pcSrc[0] * 0.11;
-				y = y / 255 * 200 + 55;
-				if (y > 255) y = 255;
+				double u1, u2, u3, u4;
+				double v1, v2, v3, v4;
+				ComputePixel(cpSrc[0], cpDstY[0], u1, v1);
+				ComputePixel(cpSrc[1], cpDstY[1], u2, v2);
+				ComputePixel(cpSrc[srcPitch], cpDstY[dstPitchY], u3, v3);
+				ComputePixel(cpSrc[srcPitch + 1], cpDstY[dstPitchY + 1], u4, v4);
 
-				int iy = y;
+				cpDstU[0] = (u1 + u2 + u3 + u4) / 4;
+				cpDstV[0] = (v1 + v2 + v3 + v4) / 4;
 
-				pcDst[2] = iy > 85 ? ((y - 85) / 255 * 340) : 0;
-				pcDst[1] = iy;
-				pcDst[0] = iy > 135 ? 255 : iy + 120;
-
-				pcSrc += 3;
-				pcDst += 3;
+				cpSrc += 2;
+				cpDstY += 2;
+				cpDstU += 1;
+				cpDstV += 1;
 			}
+			pSrc += srcPitch << 1;
+			pDstY += dstPitchY << 1;
+			pDstU += dstPitchU;
+			pDstV += dstPitchV;
 		}
 
 		return newFrame;
+	}
+
+	void ComputePixel(double sy, unsigned char& dy, double& du, double& dv)
+	{
+		double y = (sy - 16) * 200 / 219 + 55;
+		if (y > 255) y = 255;
+		double r = (y - 85) * 340 / 255;
+		if (r < 0) r = 0;
+		double b = y + 120;
+		if (b > 255) b = 255;
+		dy = (0.299 * r + 0.587 * y + 0.114 * b);
+		if (dy < 0) dy = 0;
+		if (dy > 255) dy = 255;
+		du = (-0.14713 * r - 0.28886 * y + 0.436 * b + 128);
+		if (du < 0) du = 0;
+		if (du > 255) du = 255;
+		dv = (0.615 * r - 0.51499 * y - 0.10001 * b + 128);
+		if (dv < 0) dv = 0;
+		if (dv > 255) dv = 255;
 	}
 };
 
