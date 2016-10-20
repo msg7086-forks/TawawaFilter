@@ -33,6 +33,9 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 class TawawaFilter : public GenericVideoFilter
 {
+	unsigned char m_y[256];
+	double m_u[256];
+	double m_v[256];
 public:
 	TawawaFilter(PClip child, IScriptEnvironment* env)
 		: GenericVideoFilter(child)
@@ -43,6 +46,10 @@ public:
 			env->ThrowError("TawawaFilter: Width must be mod16");
 		if (vi.height & 1)
 			env->ThrowError("TawawaFilter: Height must be even");
+		for (int i = 0; i < 256; i++)
+		{
+			ComputePixel(i, m_y[i], m_u[i], m_v[i]);
+		}
 	}
 
 	PVideoFrame __stdcall GetFrame(int n, IScriptEnvironment* env) override
@@ -70,13 +77,12 @@ public:
 			{
 				double u1, u2, u3, u4;
 				double v1, v2, v3, v4;
-				ComputePixel(cpSrc[0], cpDstY[0], u1, v1);
-				ComputePixel(cpSrc[1], cpDstY[1], u2, v2);
-				ComputePixel(cpSrc[srcPitch], cpDstY[dstPitchY], u3, v3);
-				ComputePixel(cpSrc[srcPitch + 1], cpDstY[dstPitchY + 1], u4, v4);
-
-				cpDstU[0] = (u1 + u2 + u3 + u4) / 4;
-				cpDstV[0] = (v1 + v2 + v3 + v4) / 4;
+				cpDstY[0] = m_y[cpSrc[0]];
+				cpDstY[1] = m_y[cpSrc[1]];
+				cpDstY[dstPitchY] = m_y[cpSrc[srcPitch]];
+				cpDstY[dstPitchY + 1] = m_y[cpSrc[srcPitch + 1]];
+				cpDstU[0] = (m_u[cpSrc[0]] + m_u[cpSrc[1]] + m_u[cpSrc[srcPitch]] + m_u[cpSrc[srcPitch + 1]]) / 4;
+				cpDstV[0] = (m_v[cpSrc[0]] + m_v[cpSrc[1]] + m_v[cpSrc[srcPitch]] + m_v[cpSrc[srcPitch + 1]]) / 4;
 
 				cpSrc += 2;
 				cpDstY += 2;
