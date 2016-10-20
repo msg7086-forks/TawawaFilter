@@ -29,7 +29,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 */
 
 #include <windows.h>
-#include "Avisynth.h"
+#include <Avisynth.h>
 
 class TawawaFilter : public GenericVideoFilter
 {
@@ -83,8 +83,11 @@ AVSValue __cdecl CreateTawawaFilter(AVSValue args, void* user_data, IScriptEnvir
 	return new TawawaFilter(args[0].AsClip(), env);
 }
 
-extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, void* wtf)
+const AVS_Linkage *AVS_linkage = NULL;
+
+extern "C" __declspec(dllexport) const char* __stdcall AvisynthPluginInit3(IScriptEnvironment* env, AVS_Linkage* vectors)
 {
+	AVS_linkage = vectors;
 	env->AddFunction("Tawawa", "c", CreateTawawaFilter, 0);
 	return "TawawaFilter";
 }
